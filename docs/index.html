@@ -352,6 +352,7 @@
     answers = loadAnswers();
     idx = answers.length; // kontynuuj od następnego pytania
     render();
+    pacjent.focus();
   });
 
   // --- Inicjalizacja: wczytaj dane bieżącego testu i pokaż pierwsze/następne pytanie
@@ -359,6 +360,7 @@
     answers = loadAnswers();
     idx = answers.length;
     render();
+    pacjent.focus();
   })();
 
 

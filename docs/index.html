@@ -1,1 +1,427 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TAK / NIE – licznik kliknięć</title>
+  <style>
+    :root {
+      --green: #b7e4c7; /* lekki zielony */
+      --green-hover: #95d5b2;
+      --red: #ffccd2;   /* lekki czerwony */
+      --red-hover: #ffb3bd;
+      --text: #0b132b;
+      --bg: #f7f7fb;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+      background: var(--bg);
+      color: var(--text);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      place-items: center;
+      gap: 24px;
+    }
+    header {
+      width: 100%;
+      text-align: center;
+      padding: 16px 12px 0;
+    }
+    #counter {
+      font-size: clamp(28px, 5vw, 48px);
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+   main {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
 
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;      /* wyśrodkowanie + luz od krawędzi */
+  padding: 0 20px;     /* odstęp od lewej i prawej strony */
+  box-sizing: border-box;
+}
+
+    .btn {
+      flex: 1 1 0;
+      min-width: 220px;
+      min-height: 140px;
+      border: none;
+      border-radius: 18px;
+      font-size: clamp(28px, 4.5vw, 44px);
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      outline-offset: 4px;
+    }
+    .btn:active { transform: translateY(1px) scale(0.995); }
+    .btn-yes { background: var(--green);}
+    .btn-yes:hover { background: var(--green-hover); }
+    .btn-no  { background: var(--red);}
+    .btn-no:hover { background: var(--red-hover); }
+
+    footer {
+      font-size: 14px;
+      opacity: 0.8;
+      padding-bottom: 18px;
+    }
+    footer button {
+      font: inherit;
+      border: none;
+      background: transparent;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+    
+    #pytanie {
+  font-size: 18px;
+  color: grey;
+  min-height: 3em;   /* wysokość na 2–3 linijki tekstu */
+  display: flex;
+  align-items: center; /* opcjonalnie – wyrównanie tekstu w pionie */
+  justify-content: center; /* wyśrodkowanie w poziomie */
+  text-align: center;      /* tekst na środku */
+  margin-bottom: 16px;     /* odstęp od przycisków */
+}
+
+
+  </style>
+</head>
+<body>
+  <header>
+    <span style="float: left;">&nbsp;Rodzaj testu:&nbsp;&nbsp;</span>
+    <select id="test-rodzaj" style="float: left; font-size: 16px; font-weight: 700;">
+      <option value="1">EPQ-R(S)</option>
+      <option value="2">IVE</option>
+    </select>
+    <br><br>
+    <span style="float: left;">&nbsp;Pacjent:&nbsp;&nbsp;</span>
+    <input id="pacjent" style="float: left; font-size: 16px;"></input>
+    <br><br><br>
+    <div id="counter" aria-live="polite" aria-atomic="true">Pytanie nr 1</div>
+    <br>
+    <div id="pytanie">...</div>
+  </header>
+
+  <main>
+    <button class="btn btn-yes" id="yesBtn" aria-label="TAK (klawisz 1)">TAK</button>
+    <button class="btn btn-no"  id="noBtn"  aria-label="NIE (klawisz 3)">NIE</button>
+  </main>
+
+  <footer>
+    <button id="resetBtn" style="color: red;">Resetuj</button>&nbsp;&nbsp;&nbsp;&nbsp;
+    <input id="saveBtn" style="display: none;" type="button" value="Wyślij odpowiedzi"></input>
+  </footer>
+
+  <script>
+  // --- Elementy UI
+  const counterEl = document.getElementById('counter');
+  const pytanieEl = document.getElementById('pytanie');
+  const yesBtn    = document.getElementById('yesBtn');
+  const noBtn     = document.getElementById('noBtn');
+  const resetBtn  = document.getElementById('resetBtn');
+  const selectEl  = document.getElementById('test-rodzaj');
+  const pacjent   = document.getElementById('pacjent');
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.addEventListener('click', sendAnswersViaPOST);
+
+  // --- Stałe i dane
+  const BASE_STORAGE_KEY = 'S_ODPOWIEDZI';
+  const PACJENT_KEY = "S_PACJENT";
+
+  const pytania1 = [
+    "Czy często miewasz wahania nastroju?",
+    "Czy zwracasz dużą uwagę na to, co myślą inni ludzie?",
+    "Czy jesteś osobą gadatliwą?",
+    "Czy jeśli obiecasz, że coś zrobisz, to zawsze dotrzymujesz słowa, bez względu na to, jak bardzo mogłoby to być dla ciebie niewygodne?",
+    "Czy zdarza ci się czuć „po prostu kiepsko” bez żadnego powodu?",
+    "Czy martwiłoby cię posiadanie długów?",
+    "Czy jesteś raczej energiczny (energiczna)?",
+    "Czy kiedykolwiek byłeś (byłaś) tak zachłanny (zachłanna), że wziąłeś (wzięłaś) sobie więcej, niż ci się należało?",
+    "Czy łatwo się irytujesz?",
+    "Czy zażyłbyś (zażyłabyś) środki, które mogą powodować dziwne lub niebezpieczne skutki?",
+    "Czy lubisz poznawać nowych ludzi?",
+    "Czy zdarzyło ci się obwiniać kogoś o coś, o czym wiedziałeś (wiedziałaś), że w rzeczywistości stało się z twojej winy?",
+    "Czy łatwo jest zranić twoje uczucia?",
+    "Czy wolisz raczej postępować po swojemu niż działać zgodnie z przyjętymi zasadami?",
+    "Czy na wesołej imprezie zwykle umiesz być na luzie i dobrze się bawić?",
+    "Czy wszystkie twoje przyzwyczajenia są dobre i pożądane?",
+    "Czy często czujesz, że „masz dość”?",
+    "Czy dobre maniery i schludność mają dla ciebie duże znaczenie?",
+    "Czy zazwyczaj przejmujesz inicjatywę, nawiązując nowe znajomości?",
+    "Czy kiedykolwiek wziąłeś (wzięłaś) coś (choćby pineskę lub guzik), co należało do kogoś innego?",
+    "Czy nazwałbyś siebie osobą nerwową?",
+    "Czy sądzisz, że instytucja małżeństwa jest przestarzała i należy ją znieść?",
+    "Czy łatwo udaje ci się ożywić raczej nudne przyjęcie?",
+    "Czy kiedykolwiek zniszczyłeś (zniszczyłaś) lub zgubiłeś (zgubiłaś) coś należącego do kogoś innego?",
+    "Czy zamartwiasz się z byle powodu?",
+    "Czy lubisz współpracować z innymi?",
+    "Czy na spotkaniach towarzyskich zwykle trzymasz się na uboczu?",
+    "Czy przejmujesz się, jeśli wiesz, że w twojej pracy są błędy?",
+    "Czy kiedykolwiek zdarzyło ci się powiedzieć o kimś coś złego albo złośliwego?",
+    "Czy nazwałbyś (nazwałabyś) siebie osobą spiętą lub niespokojną?",
+    "Czy uważasz, że ludzie zbyt wiele czasu poświęcają na zabezpieczanie swojej przyszłości, oszczędzając i wykupując polisy?",
+    "Czy lubisz przebywać wśród ludzi?",
+    "Czy jako dziecko bywałeś (bywałaś) bezczelny (bezczelna) wobec rodziców?",
+    "Czy długotrwale przejmujesz się sytuacjami, które wprawiły cię w zakłopotanie?",
+    "Czy zdarza się nie być dla ludzi niegrzeczną (niegrzecnym)?",
+    "Czy lubisz, kiedy wokół ciebie panuje zamieszanie i dzieje się wiele ekscytujących rzeczy?",
+    "Czy zdarzyło ci się oszukiwać w grze?",
+    "Czy twoje nerwy dają ci się we znaki?",
+    "Czy chciałbyś (chciałabyś), aby inni ludzie się ciebie bali?",
+    "Czy zdarzyło ci się kiedykolwiek wykorzystać kogoś?",
+    "Czy w towarzystwie innych ludzi przeważnie milczysz?",
+    "Czy często czujesz się samotny (samotna)?",
+    "Czy łatwiej jest przestrzegać reguł życia społecznego niż postępować według własnego uznania?",
+    "Czy inni ludzie uważają cię za osobę bardzo energiczną?",
+    "Czy zawsze postępujesz zgodnie z tym, co głosisz?",
+    "Czy często gnębi cię poczucie winy?",
+    "Czy czasami odkładasz do jutra to, co powinieneś (powinnaś) zrobić dzisiaj?",
+    "Czy potrafisz „rozkręcić” imprezę?"
+  ];
+
+  const pytania2 = [
+    "Czy lubiłbyś (lubiłabyś) jeździć na nartach wodnych?",
+    "Czy zwykle wolisz trzymać się sprawdzonych marek niż wypróbować nowe z nadzieją znalezienia czegoś lepszego?",
+    "Czy budziłby twoje współczucie samotny obcy człowiek?",
+    "Czy raczej lubisz podejmować ryzyko?",
+    "Czy często angażujesz się emocjonalnie w problemy swoich przyjaciół?",
+    "Czy lubiłbyś (lubiłabyś) skakać ze spadochronem?",
+    "Czy często kupujesz coś pod wpływem impulsu?",
+    "Czy irytują cię nieszczęśliwi ludzie, którzy użalają się nad sobą?",
+    "Czy na ogół robisz i mówisz różne rzeczy bez zastanowienia?",
+    "Czy łatwo się denerwujesz, gdy inni wokół ciebie wydają się zdenerwowani?",
+    "Czy często wpadasz w tarapaty, bo robisz różne rzeczy bez zastanowienia?",
+    "Czy uważasz, że autostop jest zbyt niebezpiecznym sposobem podróżowania?",
+    "Czy uważasz, że to głupie, gdy ludzie płaczą ze szczęścia?",
+    "Czy lubisz skakać z wysokiej trampoliny?",
+    "Czy ludzie, z którymi przebywasz, mają silny wpływ na twój nastrój?",
+    "Czy jesteś osobą impulsywną?",
+    "Czy chętnie poddajesz się nowym, ekscytującym doświadczeniom i doznaniom, nawet jeśli są one nieco przerażające i niezwykłe?",
+    "Czy jesteś bardzo przejęty (przejęta), gdy ktoś z twoich przyjaciół wygląda na zmartwionego?",
+    "Czy zwykle długo zastanawiasz się, zanim coś zrobisz?",
+    "Czy chciałbyś (chciałabyś) się nauczyć pilotowania samolotu?",
+    "Czy zdarza ci się głęboko przeżywać uczucia postaci z filmu, sztuki lub powieści?",
+    "Czy często robisz coś pod wpływem chwili?",
+    "Czy jesteś bardzo poruszony (poruszona), gdy widzisz, że ktoś płacze?",
+    "Czy zdarza ci się czasem zarazić czyimś śmiechem?",
+    "Czy zazwyczaj mówisz coś bez zastanowienia?",
+    "Czy często angażujesz się w coś, z czego później chciałbyś (chciałabyś) się wycofać?",
+    "Czy nowe i fascynujące pomysły tak cię porywają, że nigdy nie myślisz o możliwych przeszkodach?",
+    "Czy sądzisz, że trudno jest zrozumieć alpinistów, którzy ryzykują życiem, wspinając się po górach?",
+    "Czy umiesz podejmować decyzje, nie przejmując się uczuciami innych ludzi?",
+    "Czy lubisz czasem robić rzeczy, które są nieco przerażające?",
+    "Czy musisz bardzo nad sobą panować, żeby unikać kłopotów?",
+    "Czy widok kogoś płaczącego może być bardziej irytujący niż współczucie?",
+    "Czy zgodziłbyś (zgodziłabyś) się zrobić coś, co jest nielegalne lub niemoralne, ale przyjemne?",
+    "Czy na ogół wolisz stopniowo wchodzić do zimnego morza niż od razu nurkować lub wskakiwać do wody?",
+    "Czy często dziwią cię reakcje ludzi na to, co robisz lub mówisz?",
+    "Czy lubiłbyś (lubiłabyś) uczucie doznawane przy bardzo szybkim zjeździe na nartach po wysokim stoku górskim?",
+    "Czy lubisz przyglądać się ludziom otwierającym prezenty?",
+    "Czy sądzisz, że wieczór poza domem jest bardziej udany, gdy nie zaplanuje się go lub zorganizuje w ostatniej chwili?",
+    "Czy chciałbyś (chciałabyś) nurkować z butlą tlenową?",
+    "Czy sprawiłoby ci dużą trudność przekazanie komuś złych wiadomości?",
+    "Czy lubiłbyś (lubiłabyś) szybko prowadzić samochód?",
+    "Czy zwykle pracujesz szybko, bo nie lubisz odwlekać tego, co i tak musisz zrobić?",
+    "Czy na ogół ludzie wiedzą, co myślisz i czujesz?",
+    "Czy zanim się na coś zdecydujesz, rozważasz wszystkie za i przeciw?",
+    "Czy jesteś w stanie bardzo zainteresować się problemami swoich przyjaciół?",
+    "Czy chciałbyś (chciałabyś) być grotołazem?",
+    "Czy zniechęciłaby cię praca wymagająca narażania się na spore niebezpieczeństwo?",
+    "Czy wolisz „przespać się z problemem”, zanim podejmiesz decyzję?",
+    "Czy gdy ludzie krzyczą na ciebie, ty krzyczysz na nich?",
+    "Czy współczujesz ludziom, którzy są bardzo nieśmiali?",
+    "Czy jesteś radosny (radosna), gdy przebywasz wśród wesołych ludzi, i smutny (smutna), gdy inni są przygnębieni?",
+    "Czy zwykle szybko podejmujesz decyzje?",
+    "Czy możesz sobie wyobrazić, jak to jest być bardzo samotnym?",
+    "Czy odczuwasz niepokój, gdy inni są zaniepokojeni lub wpadają w panikę?"
+  ];
+
+  // --- Stan
+  let answers = [];
+  let idx = 0; // aktualny indeks pytania (0-based)
+
+  // --- Pomocnicze
+  function currentQuestions() {
+    return selectEl.value === '1' ? pytania1 : pytania2;
+  }
+  function storageKey() {
+    return `${BASE_STORAGE_KEY}_TEST_${selectEl.value}`;
+  }
+
+  function loadAnswers() {
+    try {
+      const raw = localStorage.getItem(storageKey());
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      console.warn('Błąd odczytu localStorage', e);
+      return [];
+    }
+  }
+
+  function saveAnswers() {
+    try {
+      localStorage.setItem(storageKey(), JSON.stringify(answers));
+    } catch (e) {
+      console.warn('Błąd zapisu localStorage', e);
+    }
+  }
+
+  function setButtonsEnabled(on) {
+    yesBtn.disabled = noBtn.disabled = !on;
+    yesBtn.style.opacity = noBtn.style.opacity = on ? '1' : '0.6';
+    yesBtn.style.cursor = noBtn.style.cursor = on ? 'pointer' : 'not-allowed';
+    saveBtn.style.display = !on ?  "" : "none";
+  }
+
+  function render() {
+    const qs = currentQuestions();
+    const nextNr = idx + 1;
+    const total  = qs.length;
+
+    if (idx < total) {
+      counterEl.textContent = `Pytanie nr ${nextNr} / ${total}`;
+      pytanieEl.textContent = qs[idx];
+      setButtonsEnabled(true);
+    } else {
+      counterEl.textContent = `Koniec testu (${total} pytań)`;
+      pytanieEl.textContent = '';
+      setButtonsEnabled(false);
+    }
+  }
+
+  function addAnswer(value) {
+    const qs = currentQuestions();
+    if (idx >= qs.length) return; // już koniec
+
+    const nr = idx + 1;
+    answers.push({
+      test: selectEl.value,      // "1" lub "2"
+      nr,                        // numer pytania
+      pytanie: qs[idx],          // treść pytania
+      odp: value                 // "TAK" / "NIE"
+    });
+    saveAnswers();
+
+    idx++;
+    render();
+  }
+
+  function resetState(askConfirm = true) {
+  if (askConfirm && answers.length && !confirm('Zmieniasz test lub resetujesz.\nWyczyścić zapisane odpowiedzi dla tego testu?')) {
+    answers = loadAnswers();
+    idx = answers.length;
+    render();
+    // NIE czyścimy pacjenta jeśli użytkownik nie potwierdził
+    return;
+  }
+  answers = [];
+  saveAnswers();
+  idx = 0;
+  render();
+  pacjent.value = "";
+  localStorage.removeItem(PACJENT_KEY); // <-- usuwa wpisane imię/nazwisko
+  saveBtn.value = "Wyślij dane";
+  saveBtn.disabled = false;
+}
+
+  // --- Zdarzenia
+  yesBtn.addEventListener('click', () => addAnswer('TAK'));
+  noBtn .addEventListener('click', () => addAnswer('NIE'));
+
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (document.activeElement === pacjent) return;
+    if (k === '1') { addAnswer('TAK'); }
+    else if (k === '3') { addAnswer('NIE'); }
+  });
+
+  resetBtn.addEventListener('click', () => resetState(true));
+
+  // Zmiana rodzaju testu – przełącz pytania i stan dla klucza tego testu
+  selectEl.addEventListener('change', () => {
+    // Po zmianie testu ładujemy odpowiedzi dla nowego klucza
+    answers = loadAnswers();
+    idx = answers.length; // kontynuuj od następnego pytania
+    render();
+  });
+
+  // --- Inicjalizacja: wczytaj dane bieżącego testu i pokaż pierwsze/następne pytanie
+  (function init() {
+    answers = loadAnswers();
+    idx = answers.length;
+    render();
+  })();
+
+
+  // ====== KONFIGURACJA WYŚLIJ ======
+const POST_URL = 'https://script.google.com/macros/s/AKfycby8BgPyPZlQmNK19zlWabUtc-xSm5k09aYpsWPYpVDBZ3ls2DT_SlqrPWMQSKDgT-1DRA/exec'; // <- podmień na swój URL
+const AUTH_TOKEN = ''; // opcjonalnie: np. 'Bearer abc123'
+
+// Zwraca odpowiedzi tylko dla aktualnie wybranego testu (1 lub 2)
+function getCurrentTestAnswers() {
+  const testId = selectEl.value;                   // "1" lub "2"
+  const raw = localStorage.getItem(`${BASE_STORAGE_KEY}_TEST_${testId}`);
+  const arr = raw ? JSON.parse(raw) : [];
+  return Array.isArray(arr) ? arr : [];
+}
+
+// Budujemy payload do POST
+// --- tylko numer i odpowiedź ---
+function buildPayload() {
+  const testId = selectEl.value;
+  const raw = localStorage.getItem(`${BASE_STORAGE_KEY}_TEST_${testId}`);
+  const arr = raw ? JSON.parse(raw) : [];
+  
+  // odfiltrowanie tylko {nr, odp}
+  const answers = Array.isArray(arr) ? arr.map(a => ({ nr: a.nr, odp: a.odp })) : [];
+
+  return {
+    testId,               // numer testu (1/2)
+    pname: pacjent.value,
+    answers
+  };
+}
+
+// Wysyłka z prostym UX i obsługą błędów
+async function sendAnswersViaPOST() {
+  if (pacjent.value.length<3) {
+    alert("Proszę wpisać nazwę pacjenta");
+    return
+  }
+  saveBtn.value = "Trwa wysyłanie danych...";
+  saveBtn.disabled = true;
+  const payload = buildPayload();           // { testId, count, answers:[{nr,odp}], sentAt, token? }
+  const res = await fetch(POST_URL, {
+    method: 'POST',
+    headers: { "Content-Type": "application/json" }, // simple CORS -> bez preflight
+    body: JSON.stringify(payload),
+    mode: "no-cors"
+  });
+
+  resetState(false);
+}
+
+// przy starcie wczytaj, jeśli coś było zapisane
+(function initPacjent() {
+  const saved = localStorage.getItem(PACJENT_KEY);
+  if (saved) pacjent.value = saved;
+})();
+
+// przy każdej zmianie zapisz
+pacjent.addEventListener("input", () => {
+  localStorage.setItem(PACJENT_KEY, pacjent.value);
+});
+
+
+</script>
+</body>
+</html>
